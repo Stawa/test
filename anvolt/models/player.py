@@ -4,8 +4,8 @@ import discord
 
 class MusicProperty(object):
     def __init__(self, **kwargs):
-        self.queue = []
-        self.history = []
+        self.queue = kwargs.get("queue", [])
+        self.history = kwargs.get("history", [])
         self.audio_url = kwargs.get("audio_url")
         self.video_id = kwargs.get("video_id")
         self.video_url = kwargs.get("video_url")

@@ -20,7 +20,6 @@ class PageEmbed:
         self.timeout = timeout
         self.index = 0
         self.message = None
-        self.embeds = self._generate_embed()
 
     def generate_embed(self):
         """
@@ -35,17 +34,12 @@ class PageEmbed:
         for num in range(num_embeds):
             embed = discord.Embed(title=f"Page {num+1}/{num_embeds}")
             fields = self._get_fields(num)
-            for i in range(self.fields):
-                try:
-                    field_index = num * self.fields + i
-                    field = fields[field_index]
-                    embed.add_field(
-                        name=str(field_index + 1),
-                        value=field,
-                        inline=False,
-                    )
-                except IndexError:
-                    break
+            for field in fields:
+                embed.add_field(
+                    name=str(field["index"] + 1),
+                    value=field["value"],
+                    inline=False,
+                )
             embeds.append(embed)
 
         return embeds
@@ -58,8 +52,12 @@ class PageEmbed:
             num (int): The number of the current embed.
 
         Returns:
-            list: A list of strings to be used as fields.
+            list: A list of dictionaries to be used as fields.
         """
         start = num * self.fields
         end = start + self.fields
-        return self.messages[start:end]
+        fields = [
+            {"index": index, "value": value}
+            for index, value in enumerate(self.messages[start:end], start)
+        ]
+        return fields
