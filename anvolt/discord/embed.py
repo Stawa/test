@@ -18,7 +18,6 @@ class PageEmbed:
         self.buttons = buttons
         self.fields = fields
         self.timeout = timeout
-        self.message = None
 
     def generate_embed(self):
         num_embeds = ceil(len(self.messages) / self.fields)
