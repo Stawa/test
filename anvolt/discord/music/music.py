@@ -232,75 +232,56 @@ class AnVoltMusic(Event):
         return self.currently_playing[ctx.guild.id].loop
 
     @ensure_connection
-    async def play(self, ctx, query):
+    async def play(self, ctx: commands.Context, query: str) -> Optional[MusicProperty]:
         voice = ctx.voice_client
         volume = self.default_volume
         loop = MusicEnums.NO_LOOPS
-        check_url = self.audio._check_url(query)
 
-        if check_url == MusicPlatform.SOUNDCLOUD:
-            audio, sound_info = await self.audio.retrieve_audio(
-                source=MusicPlatform.SOUNDCLOUD, query=query, client_id=self.client_id
-            )
-            player = MusicProperty(
-                audio_url=audio["url"],
-                video_id=sound_info["id"],
-                video_url=sound_info["permalink_url"],
-                title=sound_info["title"],
-                duration=round(sound_info["duration"] / 1000),
-                thumbnails=sound_info["artwork_url"],
-                is_live=False,
-                requester=ctx.author,
-            )
+        platform, sound_info = self.audio.get_audio_info(query, self.client_id)
+        if not sound_info:
+            return None
 
-        elif check_url in (MusicPlatform.YOUTUBE_URL, MusicPlatform.YOUTUBE_QUERY):
-            platform = MusicPlatform.YOUTUBE_URL
-            if check_url == MusicPlatform.YOUTUBE_QUERY:
-                search = YoutubeSearch(search_terms=query, max_results=5).to_dict()
-                query = f"https://www.youtube.com/watch?v={search[0]['id']}"
-                platform = MusicPlatform.YOUTUBE_QUERY
-
-            sound_info = await self.audio.retrieve_audio(source=platform, query=query)
-            duration = sound_info["duration"]
-            if sound_info["is_live"]:
-                duration = "LIVE"
-
-            player = MusicProperty(
-                audio_url=sound_info["url"],
-                video_id=sound_info["id"],
-                video_url=f"https://www.youtube.com/watch?v={sound_info['id']}",
-                title=sound_info["title"],
-                duration=duration,
-                thumbnails=sound_info["thumbnails"],
-                is_live=sound_info["is_live"],
-                requester=ctx.author,
-            )
+        player = MusicProperty(
+            audio_url=sound_info.get("url"),
+            video_id=sound_info.get("id"),
+            video_url=sound_info.get(
+                "permalink_url"
+                if platform == MusicPlatform.SOUNDCLOUD
+                else "https://www.youtube.com/watch?v={}".format(sound_info.get("id"))
+            ),
+            title=sound_info.get("title"),
+            duration=round(sound_info.get("duration") / 1000)
+            if platform == MusicPlatform.SOUNDCLOUD
+            else ("LIVE" if sound_info.get("is_live") else sound_info.get("duration")),
+            thumbnails=sound_info.get(
+                "artwork_url" if platform == MusicPlatform.SOUNDCLOUD else "thumbnails"
+            ),
+            is_live=sound_info.get("is_live")
+            if platform == MusicPlatform.YOUTUBE
+            else False,
+            requester=ctx.author,
+        )
 
         if voice.is_playing():
             self.add_queue(ctx=ctx, player=player)
             return player
 
-        if not voice.is_playing():
-            if self.currently_playing.get(ctx.guild.id):
-                volume = self.currently_playing[ctx.guild.id].volume
-                loop = self.currently_playing[ctx.guild.id].loop
+        source = discord.FFmpegPCMAudio(player.audio_url, options=FFMPEG_OPTIONS)
+        if self.currently_playing.get(ctx.guild.id):
+            volume = self.currently_playing[ctx.guild.id].volume
+            loop = self.currently_playing[ctx.guild.id].loop
 
-            source = discord.FFmpegPCMAudio(
-                player.audio_url,
-                options=FFMPEG_OPTIONS,
-            )
-            voice.play(
-                source,
-                after=lambda e: self.task_loop(self.bot.loop, self._play_next(ctx)),
-            )
-            voice.source = discord.PCMVolumeTransformer(
-                original=source, volume=volume / 100
-            )
+        voice.play(
+            source, after=lambda e: self.task_loop(self.bot.loop, self._play_next(ctx))
+        )
+        voice.source = discord.PCMVolumeTransformer(
+            original=source, volume=volume / 100
+        )
 
-            player.start_time = time.time()
-            player.volume = volume
-            player.loop = loop
-            self.currently_playing[ctx.guild.id] = player
-            self.add_history(ctx, player)
+        player.start_time = time.time()
+        player.volume = volume
+        player.loop = loop
+        self.currently_playing[ctx.guild.id] = player
+        self.add_history(ctx, player)
 
-            await self.call_event(event_type="on_music_start", ctx=ctx, player=player)
+        await self.call_event(event_type="on_music_start", ctx=ctx, player=player)
