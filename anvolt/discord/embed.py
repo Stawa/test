@@ -18,16 +18,9 @@ class PageEmbed:
         self.buttons = buttons
         self.fields = fields
         self.timeout = timeout
-        self.index = 0
         self.message = None
 
     def generate_embed(self):
-        """
-        Generates embeds for pagination.
-
-        Returns:
-            list: A list of `discord.Embed` objects.
-        """
         num_embeds = ceil(len(self.messages) / self.fields)
         embeds = []
 
@@ -45,15 +38,6 @@ class PageEmbed:
         return embeds
 
     def _get_fields(self, num):
-        """
-        Returns fields for a single embed.
-
-        Args:
-            num (int): The number of the current embed.
-
-        Returns:
-            list: A list of dictionaries to be used as fields.
-        """
         start = num * self.fields
         end = start + self.fields
         fields = [
