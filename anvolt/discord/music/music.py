@@ -1,4 +1,4 @@
-from .audio import AudioStreamFetcher, YDL_OPTIONS, FFMPEG_OPTIONS
+from .audio import AudioStreamFetcher, FFMPEG_OPTIONS
 from anvolt.models import MusicProperty, MusicEnums, MusicPlatform, errors
 from anvolt.discord import Event
 from discord.ext import commands
@@ -7,7 +7,6 @@ from youtube_search import YoutubeSearch
 import asyncio
 import discord
 import time
-import youtube_dl
 
 VocalGuildChannel = Union[discord.VoiceChannel, discord.StageChannel]
 e = errors
@@ -233,7 +232,7 @@ class AnVoltMusic(Event):
         return self.currently_playing[ctx.guild.id].loop
 
     @ensure_connection
-    async def play(self, ctx: commands.Context, query: str) -> Optional[MusicProperty]:
+    async def play(self, ctx, query):
         voice = ctx.voice_client
         volume = self.default_volume
         loop = MusicEnums.NO_LOOPS
@@ -243,42 +242,37 @@ class AnVoltMusic(Event):
             audio, sound_info = await self.audio.retrieve_audio(
                 source=MusicPlatform.SOUNDCLOUD, query=query, client_id=self.client_id
             )
-
             player = MusicProperty(
-                audio_url=audio.get("url"),
-                video_id=sound_info.get("id"),
-                video_url=sound_info.get("permalink_url"),
-                title=sound_info.get("title"),
-                duration=round(sound_info.get("duration") / 1000),
-                thumbnails=sound_info.get("artwork_url"),
+                audio_url=audio["url"],
+                video_id=sound_info["id"],
+                video_url=sound_info["permalink_url"],
+                title=sound_info["title"],
+                duration=round(sound_info["duration"] / 1000),
+                thumbnails=sound_info["artwork_url"],
                 is_live=False,
                 requester=ctx.author,
             )
 
-        elif check_url == MusicPlatform.YOUTUBE_URL or MusicPlatform.YOUTUBE_QUERY:
+        elif check_url in (MusicPlatform.YOUTUBE_URL, MusicPlatform.YOUTUBE_QUERY):
             platform = MusicPlatform.YOUTUBE_URL
-
             if check_url == MusicPlatform.YOUTUBE_QUERY:
                 search = YoutubeSearch(search_terms=query, max_results=5).to_dict()
-                query = "https://www.youtube.com/watch?v={}".format(search[0]["id"])
+                query = f"https://www.youtube.com/watch?v={search[0]['id']}"
                 platform = MusicPlatform.YOUTUBE_QUERY
 
             sound_info = await self.audio.retrieve_audio(source=platform, query=query)
-            duration = sound_info.get("duration")
-
-            if sound_info.get("is_live"):
+            duration = sound_info["duration"]
+            if sound_info["is_live"]:
                 duration = "LIVE"
 
             player = MusicProperty(
-                audio_url=sound_info.get("url"),
-                video_id=sound_info.get("id"),
-                video_url=sound_info.get(
-                    "https://www.youtube.com/watch?v={}".format(sound_info.get("id"))
-                ),
-                title=sound_info.get("title"),
+                audio_url=sound_info["url"],
+                video_id=sound_info["id"],
+                video_url=f"https://www.youtube.com/watch?v={sound_info['id']}",
+                title=sound_info["title"],
                 duration=duration,
-                thumbnails=sound_info.get("thumbnails"),
-                is_live=sound_info.get("is_live"),
+                thumbnails=sound_info["thumbnails"],
+                is_live=sound_info["is_live"],
                 requester=ctx.author,
             )
 
