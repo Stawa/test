@@ -1,8 +1,6 @@
 from discord.ext import commands
-from discord import ui, Interaction
-from typing import List, Optional
+from typing import List
 from math import ceil
-import asyncio
 import discord
 
 
@@ -12,7 +10,7 @@ class PageEmbed:
         ctx: commands.Context,
         messages: List[str],
         buttons: List[str],
-        fields: Optional[int] = 10,
+        fields: int = 10,
         timeout: int = 60,
     ):
         self.ctx = ctx
@@ -24,18 +22,26 @@ class PageEmbed:
         self.message = None
         self.embeds = self._generate_embed()
 
-    def _generate_embed(self):
+    def generate_embed(self):
+        """
+        Generates embeds for pagination.
+
+        Returns:
+            list: A list of `discord.Embed` objects.
+        """
         num_embeds = ceil(len(self.messages) / self.fields)
         embeds = []
 
         for num in range(num_embeds):
             embed = discord.Embed(title=f"Page {num+1}/{num_embeds}")
+            fields = self._get_fields(num)
             for i in range(self.fields):
                 try:
                     field_index = num * self.fields + i
+                    field = fields[field_index]
                     embed.add_field(
                         name=str(field_index + 1),
-                        value=self.messages[field_index],
+                        value=field,
                         inline=False,
                     )
                 except IndexError:
@@ -43,3 +49,17 @@ class PageEmbed:
             embeds.append(embed)
 
         return embeds
+
+    def _get_fields(self, num):
+        """
+        Returns fields for a single embed.
+
+        Args:
+            num (int): The number of the current embed.
+
+        Returns:
+            list: A list of strings to be used as fields.
+        """
+        start = num * self.fields
+        end = start + self.fields
+        return self.messages[start:end]
