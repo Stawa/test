@@ -1,0 +1,98 @@
+<h1 align="center">
+    anvolt.py
+</h1>
+
+<h3 align="center">
+    Advanced tool with API integration and additional features
+</h2>
+
+<p align="center">
+    <a href="https://codeclimate.com/github/Stawa/anvolt.py/maintainability"><img src="https://api.codeclimate.com/v1/badges/780b1926cc1affa10cf4/maintainability"></a>
+    <a href="https://pypi.org/project/anvolt.py"><img src="https://img.shields.io/pypi/pyversions/anvolt.py"><a>
+    <a href="https://github.com/psf/black"><img src="https://img.shields.io/static/v1?label=code style&message=black&color=black"></a>
+    <a href="https://pepy.tech/project/anvolt.py"><img src="https://static.pepy.tech/badge/anvolt-py/month"/></a>
+    <a href="https://img.shields.io/pypi/l/anvolt.py?color=informational"><img src="https://img.shields.io/pypi/l/anvolt.py?color=informational"></a>
+</p>
+
+### <span class="emoji">✨</span> Features
+
+Explore the vast array of features available in **[anvolt.py](https://anvolt.vercel.app/api/)** with this comprehensive list:
+
+- **Roleplaying Images**: Add high-quality images for immersive roleplaying experiences
+- **Quizzes / Trivia**: Incorporate interactive quizzes and trivia games to engage users
+- **Anime Images (SFW / NSFW)**: Include a variety of anime-related images, including both safe-for-work and not-safe-for-work options
+- **Client-Side Support**: Provide support for client-side implementation, allowing for seamless integration with existing projects
+- **Ease-of-Use Codes**: Design the package with simplicity and ease-of-use in mind, offering user-friendly codes and documentation
+- **Twitch API Integration**: Utilize the Twitch API to retrieve and display real-time data from Twitch streams
+- **Command-Line Interface**: Include a Command-Line Interface (CLI) for user-friendly access and control of the package's features
+
+### <span class="emoji">📦</span> Installation
+
+There are two ways to install **[anvolt.py](https://anvolt.vercel.app/api/)**, first you can use the stable release from PyPI:
+
+```bash
+$ pip install anvolt.py
+```
+
+Second you can use the development version from GitHub to get the latest features and updates:
+
+```bash
+$ pip install git+https://github.com/Stawa/anvolt.py
+```
+
+For more information on how to use the package, check out the **[documentation](https://anvolt.vercel.app/docs/)**
+
+### <span class="emoji"> 🚀 </span> Quickstart
+
+Every function will have its own response class, for example bite function, it return `Responses` class that you can find on `anvolt.models.response`
+
+```py
+from anvolt import AnVoltClient
+
+client = AnVoltClient() # client_id and client_secret (optional)
+
+def example():
+    bite = client.sfw.bite()
+    print(bite.url) # Return str
+
+example()
+```
+
+### <span class="emoji"> 🛠️ </span> Updater
+
+Stay on top of updates and avoid potential errors by using our Updater class. This class ensures you are always using the latest stable version of our API, so you can focus on building your application without worrying about potential changes or bugs.
+
+```py
+from anvolt.updater import Updater
+
+updater = Updater()
+updater.check_for_updates()
+```
+
+### <span class="emoji">💻</span> CLI / Command-Line Interface
+
+The anvolt package provides a Command-Line Interface (CLI) for easy access to its features. To test requests and retrieve a list of endpoints for a specific category, use the following commands:
+
+```bash
+$ anvolt category-help
+```
+
+This command displays a list of available categories and their respective endpoints. It allows users to see the different categories available and the endpoints associated with each one.
+
+```bash
+$ anvolt requests --category <category> --endpoint <endpoint>
+```
+
+This command will execute a test request to the specified endpoint in the chosen category. The `--category` and `--endpoint` options are required for this command to work properly.
+
+```
+$ anvolt save --category <category> --endpoint <endpoint>
+```
+
+This command retrieves an image from the API and saves it to the current directory set in the command prompt, such as `C:\Users\Stawa\Desktop\Folder`
+
+### <span class="emoji">🔗</span> Links
+
+- **[Documentation](https://anvolt.vercel.app/docs/)**
+- **[Homepage](https://github.com/Stawa/anvolt.py)**
+- **[Application Programming Interface](https://anvolt.vercel.app/api/)**
