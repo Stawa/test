@@ -1,19 +1,18 @@
-from discord.ext import commands
 from typing import List
 from math import ceil
 import discord
+
+DEFAULT_BUTTONS = ["⏪", "◀️", "▶️", "⏩"]
 
 
 class PageEmbed:
     def __init__(
         self,
-        ctx: commands.Context,
         messages: List[str],
-        buttons: List[str],
+        buttons: List[str] = DEFAULT_BUTTONS,
         fields: int = 10,
         timeout: int = 60,
     ):
-        self.ctx = ctx
         self.messages = messages
         self.buttons = buttons
         self.fields = fields
