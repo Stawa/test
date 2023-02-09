@@ -1,13 +1,13 @@
-import pprint
-from typing import Dict
 from anvolt.models import MusicPlatform, errors
 from youtube_search import YoutubeSearch
+from typing import Dict
 import aiohttp
 import re
 import youtube_dl
 import asyncio
 
 e = errors
+YoutubeUri = [MusicPlatform.YOUTUBE_QUERY, MusicPlatform.YOUTUBE_URL]
 FFMPEG_OPTIONS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
     "options": "-loglevel panic -hide_banner -nostats -nostdin -vn -b:a 192k -ac 2",
@@ -69,7 +69,7 @@ class AudioStreamFetcher:
     ) -> Dict:
         task = None
 
-        if source == MusicPlatform.YOUTUBE_URL:
+        if source in YoutubeUri:
             task = asyncio.ensure_future(self._extract_youtube_info(query))
 
         if source == MusicPlatform.SOUNDCLOUD:

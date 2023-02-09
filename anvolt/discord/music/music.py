@@ -1,9 +1,8 @@
-from .audio import AudioStreamFetcher, FFMPEG_OPTIONS
+from .audio import AudioStreamFetcher, FFMPEG_OPTIONS, YoutubeUri
 from anvolt.models import MusicProperty, MusicEnums, MusicPlatform, errors
 from anvolt.discord import Event
 from discord.ext import commands
 from typing import Tuple, Union, Optional, Callable, Dict
-from youtube_search import YoutubeSearch
 import asyncio
 import discord
 import time
@@ -12,10 +11,9 @@ VocalGuildChannel = Union[discord.VoiceChannel, discord.StageChannel]
 e = errors
 
 
-class AnVoltMusic(Event):
+class AnVoltMusic(Event, AudioStreamFetcher):
     def __init__(self, bot: commands.Bot, **kwargs):
         super().__init__()
-        self.audio = AudioStreamFetcher()
         self.bot = bot
         self.default_volume = kwargs.get("default_volume", 15)
         self.inactivity_timeout = kwargs.get("inactivity_timeout", 60)
@@ -72,7 +70,7 @@ class AnVoltMusic(Event):
         if self.queue.get(ctx.guild.id):
             self.queue[ctx.guild.id].queue.pop(num)
 
-    def add_history(self, ctx: commands.Context, player: MusicProperty):
+    def add_history(self, ctx: commands.Context, player: MusicProperty) -> None:
         self.history.setdefault(ctx.guild.id, MusicProperty()).history.append(player)
 
     def parse_duration(self, duration: Union[str, float]) -> str:
@@ -84,21 +82,27 @@ class AnVoltMusic(Event):
 
     async def get_queue(self, ctx: commands.Context) -> Optional[MusicProperty]:
         if self.queue.get(ctx.guild.id):
-            return self.queue[ctx.guild.id]
+            return self.queue[ctx.guild.id].queue
 
     async def get_history(self, ctx: commands.Context) -> Optional[MusicProperty]:
         if self.history.get(ctx.guild.id):
-            return self.history[ctx.guild.id]
+            return self.history[ctx.guild.id].history
 
     async def _play_next(self, ctx: commands.Context) -> None:
         if self.currently_playing[ctx.guild.id].loop == MusicEnums.LOOPS:
-            await self.play(
-                ctx,
-                f"https://www.youtube.com/watch?v={self.currently_playing[ctx.guild.id].video_id}",
+            self.task_loop(
+                self.bot.loop,
+                self.play(
+                    ctx,
+                    self.currently_playing.get(ctx.guild.id).video_url,
+                    volume=self.currently_playing[ctx.guild.id].volume
+                    or self.default_volume,
+                    loop=MusicEnums.LOOPS,
+                ),
             )
             return
 
-        if self.queue.get(ctx.guild.id) or self.queue.get(ctx.guild.id).queue:
+        if self.queue.get(ctx.guild.id):
             if not self.queue[ctx.guild.id].queue:
                 if self.currently_playing.get(ctx.guild.id):
                     del self.currently_playing[ctx.guild.id]
@@ -109,10 +113,17 @@ class AnVoltMusic(Event):
                 )
                 return
 
-        if self.queue.get(ctx.guild.id):
             if len(self.queue[ctx.guild.id].queue) > 0:
                 next_song = self.queue[ctx.guild.id].queue.pop(0)
-                await self.play(ctx, query=next_song.video_url)
+                self.task_loop(
+                    self.bot.loop,
+                    self.play(
+                        ctx,
+                        query=next_song.video_url,
+                        volume=self.currently_playing[ctx.guild.id].volume
+                        or self.default_volume,
+                    ),
+                )
 
     async def now_playing(
         self, ctx: commands.Context, parse_duration: bool = True
@@ -163,12 +174,7 @@ class AnVoltMusic(Event):
             return
 
         ctx.voice_client.source.volume = volume / 100
-
-        if self.queue.get(ctx.guild.id):
-            self.queue[ctx.guild.id].volume = volume
-
-        if not self.queue.get(ctx.guild.id):
-            self.currently_playing[ctx.guild.id].volume = volume
+        self.currently_playing[ctx.guild.id].volume = volume
 
         return round(ctx.voice_client.source.volume * 100)
 
@@ -232,23 +238,38 @@ class AnVoltMusic(Event):
         return self.currently_playing[ctx.guild.id].loop
 
     @ensure_connection
-    async def play(self, ctx: commands.Context, query: str) -> Optional[MusicProperty]:
+    async def play(
+        self, ctx: commands.Context, query: str, **kwargs
+    ) -> Optional[MusicProperty]:
         voice = ctx.voice_client
-        volume = self.default_volume
-        loop = MusicEnums.NO_LOOPS
+        volume = kwargs.get("volume", self.default_volume)
+        loop = kwargs.get("loop", MusicEnums.NO_LOOPS)
+        platform = self._check_url(query)
 
-        platform, sound_info = self.audio.get_audio_info(query, self.client_id)
+        audio = {}
+        sound_info = None
+
+        if platform in YoutubeUri:
+            sound_info = await self.retrieve_audio(
+                platform, query, client_id=self.client_id
+            )
+
+        if platform == MusicPlatform.SOUNDCLOUD:
+            audio, sound_info = await self.retrieve_audio(
+                platform, query, client_id=self.client_id
+            )
+
         if not sound_info:
-            return None
+            return
 
         player = MusicProperty(
-            audio_url=sound_info.get("url"),
+            audio_url=sound_info.get("url")
+            if platform in YoutubeUri
+            else audio.get("url"),
             video_id=sound_info.get("id"),
-            video_url=sound_info.get(
-                "permalink_url"
-                if platform == MusicPlatform.SOUNDCLOUD
-                else "https://www.youtube.com/watch?v={}".format(sound_info.get("id"))
-            ),
+            video_url=sound_info.get("permalink_url")
+            if platform == MusicPlatform.SOUNDCLOUD
+            else "https://www.youtube.com/watch?v={}".format(sound_info.get("id")),
             title=sound_info.get("title"),
             duration=round(sound_info.get("duration") / 1000)
             if platform == MusicPlatform.SOUNDCLOUD
@@ -256,9 +277,7 @@ class AnVoltMusic(Event):
             thumbnails=sound_info.get(
                 "artwork_url" if platform == MusicPlatform.SOUNDCLOUD else "thumbnails"
             ),
-            is_live=sound_info.get("is_live")
-            if platform == MusicPlatform.YOUTUBE
-            else False,
+            is_live=sound_info.get("is_live") if platform in YoutubeUri else False,
             requester=ctx.author,
         )
 
@@ -266,22 +285,23 @@ class AnVoltMusic(Event):
             self.add_queue(ctx=ctx, player=player)
             return player
 
-        source = discord.FFmpegPCMAudio(player.audio_url, options=FFMPEG_OPTIONS)
         if self.currently_playing.get(ctx.guild.id):
-            volume = self.currently_playing[ctx.guild.id].volume
             loop = self.currently_playing[ctx.guild.id].loop
 
+        source = discord.FFmpegPCMAudio(player.audio_url, options=FFMPEG_OPTIONS)
         voice.play(
-            source, after=lambda e: self.task_loop(self.bot.loop, self._play_next(ctx))
+            source,
+            after=lambda e: self.task_loop(self.bot.loop, self._play_next(ctx)),
         )
         voice.source = discord.PCMVolumeTransformer(
             original=source, volume=volume / 100
         )
 
         player.start_time = time.time()
-        player.volume = volume
         player.loop = loop
         self.currently_playing[ctx.guild.id] = player
-        self.add_history(ctx, player)
+
+        if loop == MusicEnums.NO_LOOPS:
+            self.add_history(ctx, player)
 
         await self.call_event(event_type="on_music_start", ctx=ctx, player=player)

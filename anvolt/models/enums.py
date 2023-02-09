@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, IntEnum
 
 
 class Route(Enum):
@@ -66,7 +66,7 @@ class TwitchModels(Enum):
     STREAM_IS_MATURE = "is_mature"
 
 
-class MusicEnums(Enum):
+class MusicEnums(IntEnum):
     """An enumeration class defining various music player settings, including loop options."""
 
     NO_LOOPS = 0
@@ -74,7 +74,7 @@ class MusicEnums(Enum):
     QUEUE_LOOPS = 2
 
 
-class MusicPlatform(Enum):
+class MusicPlatform(IntEnum):
     """An enumeration class defining the available platforms supported by anvolt.py"""
 
     YOUTUBE_URL = 0
