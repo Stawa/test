@@ -89,41 +89,29 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             return self.history[ctx.guild.id].history
 
     async def _play_next(self, ctx: commands.Context) -> None:
-        if self.currently_playing[ctx.guild.id].loop == MusicEnums.LOOPS:
+        if self.queue.get(ctx.guild.id):
+            if not self.queue[ctx.guild.id].queue:
+                del self.currently_playing[ctx.guild.id]
+                await self.call_event(event_type="on_music_end", ctx=ctx)
+                return
+
+            current_playing = self.currently_playing[ctx.guild.id]
+            next_song = self.queue[ctx.guild.id].queue.pop(0)
+            loop = (
+                current_playing.loop
+                if current_playing.loop == MusicEnums.LOOPS
+                else MusicEnums.NO_LOOPS
+            )
+
             self.task_loop(
                 self.bot.loop,
                 self.play(
                     ctx,
-                    self.currently_playing.get(ctx.guild.id).video_url,
-                    volume=self.currently_playing[ctx.guild.id].volume
-                    or self.default_volume,
-                    loop=MusicEnums.LOOPS,
+                    query=next_song.video_url,
+                    volume=current_playing.volume or self.default_volume,
+                    loop=loop,
                 ),
             )
-            return
-
-        if self.queue.get(ctx.guild.id):
-            if not self.queue[ctx.guild.id].queue:
-                if self.currently_playing.get(ctx.guild.id):
-                    del self.currently_playing[ctx.guild.id]
-
-                await self.call_event(
-                    event_type="on_music_end",
-                    ctx=ctx,
-                )
-                return
-
-            if len(self.queue[ctx.guild.id].queue) > 0:
-                next_song = self.queue[ctx.guild.id].queue.pop(0)
-                self.task_loop(
-                    self.bot.loop,
-                    self.play(
-                        ctx,
-                        query=next_song.video_url,
-                        volume=self.currently_playing[ctx.guild.id].volume
-                        or self.default_volume,
-                    ),
-                )
 
     async def now_playing(
         self, ctx: commands.Context, parse_duration: bool = True
@@ -299,6 +287,7 @@ class AnVoltMusic(Event, AudioStreamFetcher):
 
         player.start_time = time.time()
         player.loop = loop
+        player.volume = volume
         self.currently_playing[ctx.guild.id] = player
 
         if loop == MusicEnums.NO_LOOPS:
