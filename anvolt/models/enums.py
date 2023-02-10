@@ -66,6 +66,21 @@ class TwitchModels(Enum):
     STREAM_IS_MATURE = "is_mature"
 
 
+class MusicPropertiesEnums(Enum):
+    AUDIO_URL = 0
+    VIDEO_ID = 1
+    VIDEO_URL = 2
+    TITLE = 3
+    DURATION = 4
+    CURRENT_DURATION = 5
+    THUMBNAILS = 6
+    IS_LIVE = 7
+    REQUESTER = 8
+    VOLUME = 9
+    START_TIME = 10
+    LOOP = 11
+
+
 class MusicEnums(IntEnum):
     """An enumeration class defining various music player settings, including loop options."""
 

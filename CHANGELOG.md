@@ -3,7 +3,31 @@
 A notice detailing the changes made in each version of the project will be included in every release.
 Please submit an **[issue](https://github.com/Stawa/anvolt.py/issues)** if you believe there is something missing or an error.
 
+### 「0.2.0」 - Feb. 20, 2023
+
+#### New Features
+
+- Discord Music Functions
+
+  - Introducing new enums: `MusicPropertiesEnums`, `MusicEnums`, `MusicPlatform`
+  - Improved error handling with new error classes: `InvalidChannel`, `InvalidArgument`, `AlreadyConnected`, `NotConnected`, `PlayerAlreadyPaused`, `PlayerNotPaused`, `PlayerEmpty`
+  - Introducing the new music client `AnVoltMusic`
+
+- Discord Event Functions
+
+  - Introducing the new event client `Event` for music and notifications
+
+- Discord Paginator Button Embed
+
+  - Introducing the new `PageEmbed` for better navigation
+
+- Audio Fetcher for Music
+  - Introducing the new audio fetcher `AudioStreamFetcher` for improved music performance.
+
 ### 「0.1.6」 - Jan. 25, 2023
+
+<details>
+    <summary><span class="emoji">📄</span><b>View Previous Updates</b></summary>
 
 #### New Features
 
@@ -15,6 +39,8 @@ Please submit an **[issue](https://github.com/Stawa/anvolt.py/issues)** if you b
 
 - Fixed an issue where the `Games.truth` function was returning `None` due to a double `.value`
 - Fixed a bug where the `original_response` was returning different results when the produce argument was not used.
+
+</details>
 
 ### 「0.1.5」 - Jan. 24, 2023
 

@@ -2,7 +2,7 @@ from typing import List, Dict, Union, Optional
 import discord
 
 
-class MusicProperty:
+class MusicProperty(object):
     def __init__(self, **kwargs):
         self.queue: Optional[List[Dict]] = kwargs.get("queue", [])
         self.history: Optional[List[Dict]] = kwargs.get("history", [])
