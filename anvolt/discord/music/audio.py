@@ -1,6 +1,6 @@
 from anvolt.models import MusicPlatform, errors
 from youtube_search import YoutubeSearch
-from typing import Dict
+from typing import Dict, List
 import aiohttp
 import re
 import youtube_dl
@@ -26,7 +26,7 @@ YDL_OPTIONS = {
 
 class AudioStreamFetcher:
     def __init__(self) -> None:
-        pass
+        self.session = None
 
     def _check_url(self, query: str) -> MusicPlatform:
         youtube_extractor = youtube_dl.extractor.get_info_extractor("Youtube")
@@ -40,25 +40,45 @@ class AudioStreamFetcher:
 
         return MusicPlatform.YOUTUBE_QUERY
 
-    async def _retreive_soundcloud_url(self, query: str, client_id: str):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"https://api-widget.soundcloud.com/resolve?url={query}&format=json&client_id={client_id}",
-            ) as response:
-                return await response.json()
+    async def set_session(self) -> None:
+        loop = asyncio.get_event_loop()
+        self.session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=10, connect=3), loop=loop
+        )
+
+    async def _retreive_soundcloud_url(self, query: str, client_id: str) -> Dict:
+        await self.set_session()
+
+        async with self.session.get(
+            f"https://api-widget.soundcloud.com/resolve?url={query}&format=json&client_id={client_id}",
+        ) as response:
+            await self.session.close()
+            return await response.json()
+
+    async def _retreive_youtube_search(self, query: str) -> List[str]:
+        await self.set_session()
+
+        async with self.session.get(
+            f"https://www.youtube.com/results?search_query={query}",
+        ) as response:
+            video_ids = re.findall("watch\?v=(\S{11})", await response.text())
+            await self.session.close()
+            return video_ids
 
     async def _extract_soundcloud_info(self, query: str, client_id: str) -> Dict:
         url = await self._retreive_soundcloud_url(query, client_id)
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{url.get('media')['transcodings'][0]['url']}?client_id={client_id}"
-            ) as response:
-                return await response.json(), url
+        await self.set_session()
+
+        async with self.session.get(
+            f"{url.get('media')['transcodings'][0]['url']}?client_id={client_id}"
+        ) as response:
+            await self.session.close()
+            return await response.json(), url
 
     async def _extract_youtube_info(self, query: str) -> Dict:
         if not query.startswith("https"):
-            search = YoutubeSearch(search_terms=query, max_results=5).to_dict()
-            query = "https://www.youtube.com/watch?v={}".format(search[0]["id"])
+            search = await self._retreive_youtube_search(query=query)
+            query = "https://www.youtube.com/watch?v={}".format(search[0])
 
         with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
             sound_info = ydl.extract_info(query, download=False)

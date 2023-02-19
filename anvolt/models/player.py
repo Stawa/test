@@ -17,4 +17,5 @@ class MusicProperty(object):
         self.requester: discord.Member = kwargs.get("requester")
         self.volume: int = kwargs.get("volume")
         self.start_time: float = kwargs.get("start_time")
+        self.last_time: float = kwargs.get("last_time")
         self.loop: bool = kwargs.get("loop")

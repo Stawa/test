@@ -1,8 +1,9 @@
-from .audio import AudioStreamFetcher, FFMPEG_OPTIONS, YoutubeUri
+from __future__ import annotations
+from anvolt.discord.music.audio import AudioStreamFetcher, YoutubeUri, FFMPEG_OPTIONS
 from anvolt.models import MusicProperty, MusicEnums, MusicPlatform, errors
 from anvolt.discord import Event
 from discord.ext import commands
-from typing import Tuple, Union, Optional, Callable, Dict
+from typing import List, Tuple, Union, Optional, Callable, Dict
 import asyncio
 import discord
 import time
@@ -23,8 +24,18 @@ class AnVoltMusic(Event, AudioStreamFetcher):
         self.queue: Dict[MusicProperty] = {}
         self.history: Dict[MusicProperty] = {}
         self.currently_playing: Dict[MusicProperty] = {}
+        self.combined_queue: Dict[MusicProperty] = {}
+
+        self._check_opus()
+
+    def _check_opus(self) -> None:
+        if not discord.opus.is_loaded():
+            discord.opus._load_default()
 
     async def _check_inactivity(self, ctx: commands.Context):
+        if not self.inactivity_timeout:
+            return
+
         while True:
             await asyncio.sleep(10)
 
@@ -55,6 +66,66 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             return False
 
         return True
+
+    async def _play_next(self, ctx: commands.Context) -> None:
+        queue = self.queue.get(ctx.guild.id)
+        current_playing = self.currently_playing.get(ctx.guild.id)
+
+        if not queue or not queue.queue:
+            self.currently_playing.pop(ctx.guild.id)
+
+            if ctx.guild.id in self.queue:
+                self.queue.pop(ctx.guild.id)
+
+            await self.call_event(event_type="on_music_end", ctx=ctx)
+
+            return
+
+        if current_playing.loop == MusicEnums.QUEUE_LOOPS:
+            if ctx.guild.id not in self.combined_queue:
+                combined = [current_playing] + queue.queue
+                self.combined_queue[ctx.guild.id] = combined
+
+            next_track = self.combined_queue[ctx.guild.id][self.num]
+            self.task_loop(
+                self.bot.loop,
+                self.play(
+                    ctx,
+                    query=next_track.video_url,
+                    volume=current_playing.volume or self.default_volume,
+                    loop=MusicEnums.QUEUE_LOOPS,
+                ),
+            )
+
+            self.num += 1
+            if self.num >= len(queue.queue) + 1:
+                self.num = 0
+
+            return
+
+        if current_playing.loop == MusicEnums.LOOPS:
+            self.task_loop(
+                self.bot.loop,
+                self.play(
+                    ctx,
+                    query=current_playing.video_url,
+                    volume=current_playing.volume or self.default_volume,
+                    loop=MusicEnums.LOOPS,
+                ),
+            )
+
+            return
+
+        next_song = queue.queue.pop(0)
+        self.task_loop(
+            self.bot.loop,
+            self.play(
+                ctx,
+                query=next_song.video_url,
+                volume=current_playing.volume or self.default_volume,
+                loop=MusicEnums.NO_LOOPS,
+            ),
+        )
 
     def ensure_connection(func: Callable):
         async def wrapper(self, ctx, *args, **kwargs):
@@ -88,43 +159,29 @@ class AnVoltMusic(Event, AudioStreamFetcher):
         if self.history.get(ctx.guild.id):
             return self.history[ctx.guild.id].history
 
-    async def _play_next(self, ctx: commands.Context) -> None:
-        if self.queue.get(ctx.guild.id):
-            if not self.queue[ctx.guild.id].queue:
-                del self.currently_playing[ctx.guild.id]
-                await self.call_event(event_type="on_music_end", ctx=ctx)
-                return
-
-            current_playing = self.currently_playing[ctx.guild.id]
-            next_song = self.queue[ctx.guild.id].queue.pop(0)
-            loop = (
-                current_playing.loop
-                if current_playing.loop == MusicEnums.LOOPS
-                else MusicEnums.NO_LOOPS
-            )
-
-            self.task_loop(
-                self.bot.loop,
-                self.play(
-                    ctx,
-                    query=next_song.video_url,
-                    volume=current_playing.volume or self.default_volume,
-                    loop=loop,
-                ),
-            )
-
     async def now_playing(
         self, ctx: commands.Context, parse_duration: bool = True
     ) -> Optional[MusicProperty]:
-        if self.currently_playing.get(ctx.guild.id):
-            player = self.currently_playing[ctx.guild.id]
-            current_duration = time.time() - player.start_time
-            player.current_duration = (
-                self.parse_duration(duration=current_duration)
-                if parse_duration
-                else current_duration
+        currently_playing = self.currently_playing.get(ctx.guild.id)
+
+        if not currently_playing:
+            return
+
+        start_time = currently_playing.start_time
+        if ctx.voice_client.is_paused():
+            start_time = (
+                currently_playing.start_timestamp
+                + time.time()
+                - currently_playing.last_pause_timestamp
             )
-            return player
+
+        current_duration = time.time() - start_time
+        currently_playing.current_duration = (
+            self.parse_duration(duration=current_duration)
+            if parse_duration
+            else current_duration
+        )
+        return currently_playing
 
     async def join(
         self, ctx: commands.Context
@@ -150,6 +207,8 @@ class AnVoltMusic(Event, AudioStreamFetcher):
 
     @ensure_connection
     async def volume(self, ctx: commands.Context, volume: int = None) -> Optional[int]:
+        currently_playing = self.currently_playing.get(ctx.guild.id)
+
         if not volume:
             return round(ctx.voice_client.source.volume * 100)
 
@@ -161,13 +220,29 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             )
             return
 
+        if not currently_playing:
+            await self.call_event(
+                event_type="on_music_error",
+                ctx=ctx,
+                error=e.PlayerEmpty("No song is currently being played."),
+            )
+            return
+
         ctx.voice_client.source.volume = volume / 100
-        self.currently_playing[ctx.guild.id].volume = volume
+        currently_playing.volume = volume
 
         return round(ctx.voice_client.source.volume * 100)
 
     @ensure_connection
     async def pause(self, ctx: commands.Context) -> Optional[bool]:
+        if not ctx.voice_client.is_playing():
+            await self.call_event(
+                event_type="on_music_error",
+                ctx=ctx,
+                error=e.PlayerEmpty("No song is currently being played."),
+            )
+            return
+
         if ctx.voice_client.is_paused():
             await self.call_event(
                 event_type="on_music_error",
@@ -177,6 +252,8 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             return
 
         ctx.voice_client.pause()
+        now_playing = self.currently_playing[ctx.guild.id]
+        now_playing.last_time = time.time()
         return True
 
     @ensure_connection
@@ -190,6 +267,8 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             return
 
         ctx.voice_client.resume()
+        now_playing = self.currently_playing[ctx.guild.id]
+        now_playing.current_duration += str(time.time() - now_playing.last_time)
         return True
 
     @ensure_connection
@@ -222,6 +301,27 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             if self.currently_playing[ctx.guild.id].loop != MusicEnums.LOOPS
             else MusicEnums.NO_LOOPS
         )
+
+        return self.currently_playing[ctx.guild.id].loop
+
+    @ensure_connection
+    async def queueloop(self, ctx: commands.Context):
+        if not ctx.guild.id in self.currently_playing:
+            await self.call_event(
+                event_type="on_music_error",
+                ctx=ctx,
+                error=e.PlayerEmpty("No song is currently being played."),
+            )
+            return
+
+        self.currently_playing[ctx.guild.id].loop = (
+            MusicEnums.QUEUE_LOOPS
+            if self.currently_playing[ctx.guild.id].loop != MusicEnums.QUEUE_LOOPS
+            else MusicEnums.NO_LOOPS
+        )
+
+        if self.currently_playing[ctx.guild.id].loop == MusicEnums.NO_LOOPS:
+            self.combined_queue.pop(ctx.guild.id)
 
         return self.currently_playing[ctx.guild.id].loop
 
@@ -272,9 +372,6 @@ class AnVoltMusic(Event, AudioStreamFetcher):
         if voice.is_playing():
             self.add_queue(ctx=ctx, player=player)
             return player
-
-        if self.currently_playing.get(ctx.guild.id):
-            loop = self.currently_playing[ctx.guild.id].loop
 
         source = discord.FFmpegPCMAudio(player.audio_url, options=FFMPEG_OPTIONS)
         voice.play(
