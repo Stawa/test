@@ -331,9 +331,6 @@ class AnVoltMusic(Event, AudioStreamFetcher):
         loop = kwargs.get("loop", MusicEnums.NO_LOOPS)
         platform = self._check_url(query)
 
-        audio = {}
-        sound_info = None
-
         if platform in YoutubeUri:
             sound_info = await self.retrieve_audio(
                 platform, query, client_id=self.client_id
@@ -354,7 +351,7 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             video_id=sound_info.get("id"),
             video_url=sound_info.get("permalink_url")
             if platform == MusicPlatform.SOUNDCLOUD
-            else "https://www.youtube.com/watch?v={}".format(sound_info.get("id")),
+            else f"https://www.youtube.com/watch?v={sound_info.get('id')}",
             title=sound_info.get("title"),
             duration=round(sound_info.get("duration") / 1000)
             if platform == MusicPlatform.SOUNDCLOUD
