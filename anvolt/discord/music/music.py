@@ -72,19 +72,15 @@ class AnVoltMusic(Event, AudioStreamFetcher):
         current_playing = self.currently_playing.get(ctx.guild.id)
 
         if not queue or not queue.queue:
-            self.currently_playing.pop(ctx.guild.id)
-
-            if ctx.guild.id in self.queue:
-                self.queue.pop(ctx.guild.id)
+            self.currently_playing.pop(ctx.guild.id, None)
+            self.queue.pop(ctx.guild.id, None)
 
             await self.call_event(event_type="on_music_end", ctx=ctx)
-
             return
 
         if current_playing.loop == MusicEnums.QUEUE_LOOPS:
             if ctx.guild.id not in self.combined_queue:
-                combined = [current_playing] + queue.queue
-                self.combined_queue[ctx.guild.id] = combined
+                self.combined_queue[ctx.guild.id] = [current_playing] + queue.queue
 
             next_track = self.combined_queue[ctx.guild.id][self.num]
             self.task_loop(
@@ -97,10 +93,7 @@ class AnVoltMusic(Event, AudioStreamFetcher):
                 ),
             )
 
-            self.num += 1
-            if self.num >= len(queue.queue) + 1:
-                self.num = 0
-
+            self.num = (self.num + 1) % len(self.combined_queue[ctx.guild.id])
             return
 
         if current_playing.loop == MusicEnums.LOOPS:
@@ -113,7 +106,6 @@ class AnVoltMusic(Event, AudioStreamFetcher):
                     loop=MusicEnums.LOOPS,
                 ),
             )
-
             return
 
         next_song = queue.queue.pop(0)
@@ -165,9 +157,10 @@ class AnVoltMusic(Event, AudioStreamFetcher):
         currently_playing = self.currently_playing.get(ctx.guild.id)
 
         if not currently_playing:
-            return
+            return None
 
         start_time = currently_playing.start_time
+
         if ctx.voice_client.is_paused():
             start_time = (
                 currently_playing.start_timestamp
@@ -176,11 +169,11 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             )
 
         current_duration = time.time() - start_time
-        currently_playing.current_duration = (
-            self.parse_duration(duration=current_duration)
-            if parse_duration
-            else current_duration
-        )
+
+        if parse_duration:
+            current_duration = self.parse_duration(duration=current_duration)
+
+        currently_playing.current_duration = current_duration
         return currently_playing
 
     async def join(
@@ -252,7 +245,7 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             return
 
         ctx.voice_client.pause()
-        now_playing = self.currently_playing[ctx.guild.id]
+        now_playing = self.currently_playing.get(ctx.guild.id)
         now_playing.last_time = time.time()
         return True
 
@@ -267,7 +260,7 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             return
 
         ctx.voice_client.resume()
-        now_playing = self.currently_playing[ctx.guild.id]
+        now_playing = self.currently_playing.get(ctx.guild.id)
         now_playing.current_duration += str(time.time() - now_playing.last_time)
         return True
 
@@ -296,13 +289,15 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             )
             return
 
-        self.currently_playing[ctx.guild.id].loop = (
+        current_playing = self.currently_playing.get(ctx.guild.id)
+
+        current_playing.loop = (
             MusicEnums.LOOPS
-            if self.currently_playing[ctx.guild.id].loop != MusicEnums.LOOPS
+            if current_playing.loop != MusicEnums.LOOPS
             else MusicEnums.NO_LOOPS
         )
 
-        return self.currently_playing[ctx.guild.id].loop
+        return current_playing.loop
 
     @ensure_connection
     async def queueloop(self, ctx: commands.Context):
@@ -314,16 +309,18 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             )
             return
 
-        self.currently_playing[ctx.guild.id].loop = (
+        current_playing = self.currently_playing.get(ctx.guild.id)
+
+        current_playing.loop = (
             MusicEnums.QUEUE_LOOPS
-            if self.currently_playing[ctx.guild.id].loop != MusicEnums.QUEUE_LOOPS
+            if current_playing.loop != MusicEnums.QUEUE_LOOPS
             else MusicEnums.NO_LOOPS
         )
 
-        if self.currently_playing[ctx.guild.id].loop == MusicEnums.NO_LOOPS:
-            self.combined_queue.pop(ctx.guild.id)
+        if current_playing.loop == MusicEnums.NO_LOOPS:
+            self.combined_queue.pop(ctx.guild.id, None)
 
-        return self.currently_playing[ctx.guild.id].loop
+        return current_playing.loop
 
     @ensure_connection
     async def play(
