@@ -1,11 +1,18 @@
-from typing import List, Dict, Union, Optional
+from typing import Union, Optional, List
 import discord
+
+
+class QueueSession(object):
+    def __init__(self, **kwargs) -> None:
+        self.queue: Optional[List[MusicProperty]] = kwargs.get("queue", [])
+        self.history: Optional[List[MusicProperty]] = kwargs.get("history", [])
+        self.combined_queue: Optional[List[MusicProperty]] = kwargs.get(
+            "combined_queue", []
+        )
 
 
 class MusicProperty(object):
     def __init__(self, **kwargs):
-        self.queue: Optional[List[Dict]] = kwargs.get("queue", [])
-        self.history: Optional[List[Dict]] = kwargs.get("history", [])
         self.audio_url: str = kwargs.get("audio_url")
         self.video_id: str = kwargs.get("video_id")
         self.video_url: str = kwargs.get("video_url")

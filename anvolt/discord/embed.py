@@ -62,6 +62,7 @@ class PageEmbed:
                     value=value_fields.format(*values),
                     inline=False,
                 )
+
             embeds.append(embed)
 
         return embeds

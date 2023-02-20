@@ -1,6 +1,6 @@
 from __future__ import annotations
 from anvolt.discord.music.audio import AudioStreamFetcher, YoutubeUri, FFMPEG_OPTIONS
-from anvolt.models import MusicProperty, MusicEnums, MusicPlatform, errors
+from anvolt.models import MusicProperty, MusicEnums, MusicPlatform, QueueSession, errors
 from anvolt.discord import Event
 from discord.ext import commands
 from typing import Tuple, Union, Optional, Callable, Dict
@@ -21,10 +21,10 @@ class AnVoltMusic(Event, AudioStreamFetcher):
         self.client_id = kwargs.get("client_id", None)
 
         self.num = 0
-        self.queue: Dict[MusicProperty] = {}
-        self.history: Dict[MusicProperty] = {}
-        self.currently_playing: Dict[MusicProperty] = {}
-        self.combined_queue: Dict[MusicProperty] = {}
+        self.queue: Dict[QueueSession] = {}
+        self.history: Dict[QueueSession] = {}
+        self.currently_playing: Dict[QueueSession] = {}
+        self.combined_queue: Dict[QueueSession] = {}
 
         self._check_opus()
 
@@ -127,14 +127,14 @@ class AnVoltMusic(Event, AudioStreamFetcher):
         return wrapper
 
     def add_queue(self, ctx: commands.Context, player: MusicProperty) -> None:
-        self.queue.setdefault(ctx.guild.id, MusicProperty()).queue.append(player)
+        self.queue.setdefault(ctx.guild.id, QueueSession()).queue.append(player)
 
     def remove_queue(self, ctx: commands.Context, num: int) -> None:
         if self.queue.get(ctx.guild.id):
             self.queue[ctx.guild.id].queue.pop(num)
 
     def add_history(self, ctx: commands.Context, player: MusicProperty) -> None:
-        self.history.setdefault(ctx.guild.id, MusicProperty()).history.append(player)
+        self.history.setdefault(ctx.guild.id, QueueSession()).history.append(player)
 
     def parse_duration(self, duration: Union[str, float]) -> str:
         if duration == "LIVE":
@@ -144,6 +144,13 @@ class AnVoltMusic(Event, AudioStreamFetcher):
         return duration[3:] if duration.startswith("00") else duration
 
     async def get_queue(self, ctx: commands.Context) -> Optional[MusicProperty]:
+        currently_playing = self.currently_playing.get(ctx.guild.id)
+
+        if currently_playing.loop == MusicEnums.QUEUE_LOOPS:
+            if ctx.guild.id in self.combined_queue:
+                return self.combined_queue[ctx.guild.id][self.num :]
+            return self.queue[ctx.guild.id].queue[self.num :]
+
         if self.queue.get(ctx.guild.id):
             return self.queue[ctx.guild.id].queue
 
@@ -290,7 +297,6 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             return
 
         current_playing = self.currently_playing.get(ctx.guild.id)
-
         current_playing.loop = (
             MusicEnums.LOOPS
             if current_playing.loop != MusicEnums.LOOPS
@@ -320,7 +326,6 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             return
 
         current_playing = self.currently_playing.get(ctx.guild.id)
-
         current_playing.loop = (
             MusicEnums.QUEUE_LOOPS
             if current_playing.loop != MusicEnums.QUEUE_LOOPS
