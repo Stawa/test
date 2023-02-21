@@ -14,27 +14,13 @@ class AnVoltMusic(Event, AudioStreamFetcher):
 
         self._check_opus()
 
-    async def now_playing(
-        self, ctx: commands.Context, parse_duration: bool = True
-    ) -> Optional[MusicProperty]:
+    async def get_queue(self, ctx: commands.Context) -> Optional[MusicProperty]:
         currently_playing = self.currently_playing.get(ctx.guild.id)
 
-        if not currently_playing:
-            return None
+        if currently_playing.loop == MusicEnums.QUEUE_LOOPS:
+            if ctx.guild.id in self.combined_queue:
+                return self.combined_queue[ctx.guild.id][self.num :]
+            return self.queue[ctx.guild.id].queue[self.num :]
 
-        start_time = currently_playing.start_time
-
-        if ctx.voice_client.is_paused():
-            start_time = (
-                currently_playing.start_timestamp
-                + time.time()
-                - currently_playing.last_pause_timestamp
-            )
-
-        current_duration = time.time() - start_time
-
-        if parse_duration:
-            current_duration = self.parse_duration(duration=current_duration)
-
-        currently_playing.current_duration = current_duration
-        return currently_playing
+        if self.queue.get(ctx.guild.id):
+            return self.queue[ctx.guild.id].queue
