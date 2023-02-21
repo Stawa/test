@@ -14,34 +14,27 @@ class AnVoltMusic(Event, AudioStreamFetcher):
 
         self._check_opus()
 
-    @ensure_connection
-    async def queueloop(self, ctx: commands.Context):
-        if not ctx.guild.id in self.currently_playing:
-            await self.call_event(
-                event_type="on_music_error",
-                ctx=ctx,
-                error=e.PlayerEmpty("No song is currently being played."),
+    async def now_playing(
+        self, ctx: commands.Context, parse_duration: bool = True
+    ) -> Optional[MusicProperty]:
+        currently_playing = self.currently_playing.get(ctx.guild.id)
+
+        if not currently_playing:
+            return None
+
+        start_time = currently_playing.start_time
+
+        if ctx.voice_client.is_paused():
+            start_time = (
+                currently_playing.start_timestamp
+                + time.time()
+                - currently_playing.last_pause_timestamp
             )
-            return
 
-        if not ctx.guild.id in self.queue:
-            await self.call_event(
-                event_type="on_music_error",
-                ctx=ctx,
-                error=e.QueueEmpty(
-                    "Unable to activate the queueloop because there are no items in the queue."
-                ),
-            )
-            return
+        current_duration = time.time() - start_time
 
-        current_playing = self.currently_playing.get(ctx.guild.id)
-        current_playing.loop = (
-            MusicEnums.QUEUE_LOOPS
-            if current_playing.loop != MusicEnums.QUEUE_LOOPS
-            else MusicEnums.NO_LOOPS
-        )
+        if parse_duration:
+            current_duration = self.parse_duration(duration=current_duration)
 
-        if current_playing.loop == MusicEnums.NO_LOOPS:
-            self.combined_queue.pop(ctx.guild.id, None)
-
-        return current_playing.loop
+        currently_playing.current_duration = current_duration
+        return currently_playing
