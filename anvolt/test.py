@@ -14,13 +14,54 @@ class AnVoltMusic(Event, AudioStreamFetcher):
 
         self._check_opus()
 
-    async def get_queue(self, ctx: commands.Context) -> Optional[MusicProperty]:
-        currently_playing = self.currently_playing.get(ctx.guild.id)
+    async def _play_next(self, ctx: commands.Context) -> None:
+        queue = self.queue.get(ctx.guild.id)
+        current_playing = self.currently_playing.get(ctx.guild.id)
 
-        if currently_playing.loop == MusicEnums.QUEUE_LOOPS:
-            if ctx.guild.id in self.combined_queue:
-                return self.combined_queue[ctx.guild.id][self.num :]
-            return self.queue[ctx.guild.id].queue[self.num :]
+        if not queue or not queue.queue:
+            self.currently_playing.pop(ctx.guild.id, None)
+            self.queue.pop(ctx.guild.id, None)
 
-        if self.queue.get(ctx.guild.id):
-            return self.queue[ctx.guild.id].queue
+            await self.call_event(event_type="on_music_end", ctx=ctx)
+            return
+
+        if current_playing.loop == MusicEnums.QUEUE_LOOPS:
+            if ctx.guild.id not in self.combined_queue:
+                self.combined_queue[ctx.guild.id] = [current_playing] + queue.queue
+
+            next_track = self.combined_queue[ctx.guild.id][self.num]
+            self.task_loop(
+                self.bot.loop,
+                self.play(
+                    ctx,
+                    query=next_track,
+                    volume=current_playing.volume or self.default_volume,
+                    loop=MusicEnums.QUEUE_LOOPS,
+                ),
+            )
+
+            self.num = (self.num + 1) % len(self.combined_queue[ctx.guild.id])
+            return
+
+        if current_playing.loop == MusicEnums.LOOPS:
+            self.task_loop(
+                self.bot.loop,
+                self.play(
+                    ctx,
+                    query=current_playing,
+                    volume=current_playing.volume or self.default_volume,
+                    loop=MusicEnums.LOOPS,
+                ),
+            )
+            return
+
+        next_song = queue.queue.pop(0)
+        self.task_loop(
+            self.bot.loop,
+            self.play(
+                ctx,
+                query=next_song,
+                volume=current_playing.volume or self.default_volume,
+                loop=MusicEnums.NO_LOOPS,
+            ),
+        )
