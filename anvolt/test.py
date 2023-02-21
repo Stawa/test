@@ -15,72 +15,33 @@ class AnVoltMusic(Event, AudioStreamFetcher):
         self._check_opus()
 
     @ensure_connection
-    async def play(
-        self, ctx: commands.Context, query: Union[str, MusicProperty], **kwargs
-    ) -> Optional[MusicProperty]:
-        voice = ctx.voice_client
-        volume = kwargs.get("volume", self.default_volume)
-        loop = kwargs.get("loop", MusicEnums.NO_LOOPS)
-        player = query if isinstance(query, MusicProperty) else None
-
-        if not isinstance(query, MusicProperty):
-            platform = self._check_url(query)
-
-            if platform in YoutubeUri:
-                sound_info = await self.retrieve_audio(
-                    platform, query, client_id=self.client_id
-                )
-
-            if platform == MusicPlatform.SOUNDCLOUD:
-                audio, sound_info = await self.retrieve_audio(
-                    platform, query, client_id=self.client_id
-                )
-
-            if not sound_info:
-                return None
-
-            player = MusicProperty(
-                audio_url=sound_info.get("url")
-                if platform in YoutubeUri
-                else audio.get("url"),
-                video_id=sound_info.get("id"),
-                video_url=sound_info.get("permalink_url")
-                if platform == MusicPlatform.SOUNDCLOUD
-                else f"https://www.youtube.com/watch?v={sound_info.get('id')}",
-                title=sound_info.get("title"),
-                duration=round(sound_info.get("duration") / 1000)
-                if platform == MusicPlatform.SOUNDCLOUD
-                else (
-                    "LIVE" if sound_info.get("is_live") else sound_info.get("duration")
-                ),
-                thumbnails=sound_info.get(
-                    "artwork_url"
-                    if platform == MusicPlatform.SOUNDCLOUD
-                    else "thumbnails"
-                ),
-                is_live=sound_info.get("is_live") if platform in YoutubeUri else False,
-                requester=ctx.author,
+    async def queueloop(self, ctx: commands.Context):
+        if not ctx.guild.id in self.currently_playing:
+            await self.call_event(
+                event_type="on_music_error",
+                ctx=ctx,
+                error=e.PlayerEmpty("No song is currently being played."),
             )
+            return
 
-        if voice.is_playing():
-            self.add_queue(ctx=ctx, player=player)
-            return player
+        if not ctx.guild.id in self.queue:
+            await self.call_event(
+                event_type="on_music_error",
+                ctx=ctx,
+                error=e.QueueEmpty(
+                    "Unable to activate the queueloop because there are no items in the queue."
+                ),
+            )
+            return
 
-        source = discord.FFmpegPCMAudio(player.audio_url, options=FFMPEG_OPTIONS)
-        voice.play(
-            source,
-            after=lambda e: self.task_loop(self.bot.loop, self._play_next(ctx)),
+        current_playing = self.currently_playing.get(ctx.guild.id)
+        current_playing.loop = (
+            MusicEnums.QUEUE_LOOPS
+            if current_playing.loop != MusicEnums.QUEUE_LOOPS
+            else MusicEnums.NO_LOOPS
         )
-        voice.source = discord.PCMVolumeTransformer(
-            original=source, volume=volume / 100
-        )
 
-        player.start_time = time.time()
-        player.loop = loop
-        player.volume = volume
-        self.currently_playing[ctx.guild.id] = player
+        if current_playing.loop == MusicEnums.NO_LOOPS:
+            self.combined_queue.pop(ctx.guild.id, None)
 
-        if loop == MusicEnums.NO_LOOPS:
-            self.add_history(ctx, player)
-
-        await self.call_event(event_type="on_music_start", ctx=ctx, player=player)
+        return current_playing.loop
