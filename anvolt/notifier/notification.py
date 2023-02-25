@@ -18,6 +18,26 @@ class NotifierClient(Event):
         self.webhook_url = webhook_url
         self.client = TwitchClient(self.client_id, self.client_secret)
 
+    async def start_event(self, bot: commands.Bot = None, user: Union[str, int] = None):
+        await bot.wait_until_ready()
+
+        retrieve_user = await self.client.retrieve_user(user)
+
+        if isinstance(user, str):
+            user = retrieve_user["id"]
+
+        try:
+            stream_items = await self.client.retrieve_stream(user=user)
+        except e.UserOffline:
+            await self.call_event(
+                event_type="on_notification_offline", user=retrieve_user
+            )
+            return
+
+        await self.call_event(
+            event_type="on_notification_online", user=retrieve_user, stream=stream_items
+        )
+
     async def send_webhook(
         self,
         user: Union[str, int] = None,

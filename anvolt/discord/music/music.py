@@ -3,7 +3,7 @@ from anvolt.discord.music.audio import AudioStreamFetcher, YoutubeUri, FFMPEG_OP
 from anvolt.models import MusicProperty, MusicEnums, MusicPlatform, QueueSession, errors
 from anvolt.discord import Event
 from discord.ext import commands
-from typing import Tuple, Union, Optional, Callable, Dict
+from typing import List, Tuple, Union, Optional, Callable, Dict, Any
 import asyncio
 import discord
 import time
@@ -23,8 +23,8 @@ class AnVoltMusic(Event, AudioStreamFetcher):
         self.num = 0
         self.queue: Dict[QueueSession] = {}
         self.history: Dict[QueueSession] = {}
-        self.currently_playing: Dict[QueueSession] = {}
-        self.combined_queue: Dict[QueueSession] = {}
+        self.currently_playing: Dict[List[MusicProperty]] = {}
+        self.combined_queue: Dict[List[MusicProperty]] = {}
 
         self._check_opus()
 
@@ -48,7 +48,7 @@ class AnVoltMusic(Event, AudioStreamFetcher):
                     await asyncio.sleep(self.inactivity_timeout)
                     await ctx.voice_client.disconnect(force=True)
 
-    async def _check_connection(self, ctx: commands.Context):
+    async def _check_connection(self, ctx: commands.Context) -> bool:
         if not ctx.voice_client:
             await self.call_event(
                 event_type="on_music_error",
@@ -170,9 +170,7 @@ class AnVoltMusic(Event, AudioStreamFetcher):
 
         if ctx.voice_client.is_paused():
             start_time = (
-                currently_playing.start_timestamp
-                + time.time()
-                - currently_playing.last_pause_timestamp
+                currently_playing.start_time + time.time() - currently_playing.last_time
             )
 
         current_duration = time.time() - start_time
@@ -184,7 +182,7 @@ class AnVoltMusic(Event, AudioStreamFetcher):
         return currently_playing
 
     async def join(
-        self, ctx: commands.Context
+        self, ctx: commands.Context, mute: bool = False, deafen: bool = False
     ) -> Optional[Tuple[VocalGuildChannel, discord.VoiceClient]]:
         if not ctx.author.voice:
             await self.call_event(
@@ -195,7 +193,9 @@ class AnVoltMusic(Event, AudioStreamFetcher):
             return
 
         channel = ctx.author.voice.channel
-        voice_client = await channel.connect(cls=discord.VoiceClient)
+        voice_client = await channel.connect(
+            cls=discord.VoiceClient, self_mute=mute, self_deaf=deafen
+        )
         self.bot.loop.create_task(self._check_inactivity(ctx))
         return channel, voice_client
 
@@ -361,6 +361,57 @@ class AnVoltMusic(Event, AudioStreamFetcher):
 
             if not sound_info:
                 return None
+
+            if isinstance(sound_info, list):
+                for item in sound_info:
+                    if platform in YoutubeUri:
+                        sound_info = await self.retrieve_audio(
+                            platform,
+                            item,
+                            client_id=self.client_id,
+                        )
+
+                    if platform == MusicPlatform.SOUNDCLOUD:
+                        audio, sound_info = await self.retrieve_audio(
+                            platform,
+                            item.get("permalink_url"),
+                            client_id=self.client_id,
+                        )
+
+                    player = MusicProperty(
+                        audio_url=sound_info.get("url")
+                        if platform in YoutubeUri
+                        else audio.get("url"),
+                        video_id=sound_info.get("id"),
+                        video_url=sound_info.get("permalink_url")
+                        if platform == MusicPlatform.SOUNDCLOUD
+                        else f"https://www.youtube.com/watch?v={sound_info.get('id')}",
+                        title=sound_info.get("title"),
+                        duration=round(sound_info.get("duration") / 1000)
+                        if platform == MusicPlatform.SOUNDCLOUD
+                        else (
+                            "LIVE"
+                            if sound_info.get("is_live")
+                            else sound_info.get("duration")
+                        ),
+                        thumbnails=sound_info.get(
+                            "artwork_url"
+                            if platform == MusicPlatform.SOUNDCLOUD
+                            else "thumbnails"
+                        ),
+                        is_live=sound_info.get("is_live")
+                        if platform in YoutubeUri
+                        else False,
+                        requester=ctx.author,
+                    )
+
+                    if voice.is_playing():
+                        self.add_queue(ctx, player)
+
+                    if not voice.is_playing():
+                        await self.play(ctx, query=player)
+
+                return
 
             player = MusicProperty(
                 audio_url=sound_info.get("url")

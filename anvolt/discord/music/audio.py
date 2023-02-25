@@ -1,6 +1,5 @@
 from anvolt.models import MusicPlatform, errors
-from youtube_search import YoutubeSearch
-from typing import Dict, List
+from typing import Dict, List, Union
 import aiohttp
 import re
 import youtube_dl
@@ -14,6 +13,9 @@ FFMPEG_OPTIONS = {
 }
 YDL_OPTIONS = {
     "format": "bestaudio/best",
+    "quiet": True,
+    "no_warnings": True,
+    "ignoreerrors": True,
     "postprocessors": [
         {
             "key": "FFmpegExtractAudio",
@@ -65,8 +67,19 @@ class AudioStreamFetcher:
             await self.session.close()
             return video_ids
 
-    async def _extract_soundcloud_info(self, query: str, client_id: str) -> Dict:
+    async def _extract_soundcloud_info(
+        self, query: str, client_id: str
+    ) -> Union[List, Dict]:
         url = await self._retreive_soundcloud_url(query, client_id)
+
+        if "tracks" in url:
+            urls = []
+
+            for items in url.get("tracks"):
+                urls.append(items)
+
+            return url, urls
+
         await self.set_session()
 
         async with self.session.get(
@@ -75,13 +88,22 @@ class AudioStreamFetcher:
             await self.session.close()
             return await response.json(), url
 
-    async def _extract_youtube_info(self, query: str) -> Dict:
+    async def _extract_youtube_info(self, query: str) -> Union[List, Dict]:
         if not query.startswith("https"):
             search = await self._retreive_youtube_search(query=query)
             query = "https://www.youtube.com/watch?v={}".format(search[0])
 
         with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
             sound_info = ydl.extract_info(query, download=False)
+
+            if "entries" in sound_info:
+                urls = []
+
+                for i, _ in enumerate(sound_info["entries"]):
+                    urls.append(sound_info["entries"][i]["webpage_url"])
+
+                return urls
+
             return sound_info
 
     async def retrieve_audio(

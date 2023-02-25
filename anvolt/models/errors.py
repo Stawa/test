@@ -60,5 +60,17 @@ class PlayerNotPaused(Exception):
 
 class PlayerEmpty(Exception):
     """
-    An exception raised when the player or queue has no contents.
+    An exception raised when the player has no contents.
+    """
+
+
+class QueueEmpty(Exception):
+    """
+    An exception raised when the queue has no contents.
+    """
+
+
+class UserOffline(Exception):
+    """
+    An exception raised when user is offline.
     """

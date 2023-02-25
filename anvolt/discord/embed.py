@@ -1,6 +1,6 @@
 from anvolt.models import MusicPropertiesEnums, MusicProperty
 from datetime import datetime
-from typing import List, Union
+from typing import List, Union, Optional
 from math import ceil
 import discord
 
@@ -27,32 +27,30 @@ class PageEmbed:
         page_on: Union[TITLE, FOOTER] = FOOTER,
         value_fields: str = None,
         assets_format: List[MusicPropertiesEnums] = None,
-        **kwargs,
-    ):
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+        footer: Optional[str] = None,
+        color: Optional[str] = None,
+        timestamp: datetime = datetime.utcnow(),
+    ) -> List[discord.Embed]:
         num_embeds = ceil(len(self.messages) / self.fields)
         enum_names = [asset.name.lower() for asset in assets_format]
         embeds = []
 
-        title = kwargs.get("title", "")
-        description = kwargs.get("description", "")
-        footer = kwargs.get("footer", "")
-        color = kwargs.get("color", discord.Color.from_rgb(170, 255, 0))
-        timestamp = kwargs.get("timestamp", datetime.utcnow())
-
         for num in range(num_embeds):
+            embed_title = (
+                title if page_on != TITLE else f"Page {num+1}/{num_embeds} {title}"
+            )
+            embed_footer = footer if page_on != FOOTER else f"Page {num+1}/{num_embeds}"
+
+            fields = self._get_fields(num)
             embed = discord.Embed(
-                title=f"Page {num+1}/{num_embeds} {title}"
-                if page_on == TITLE
-                else title,
+                title=embed_title,
                 description=description,
                 color=color,
                 timestamp=timestamp,
-            )
-            embed.set_footer(
-                text=f"Page {num+1}/{num_embeds}" if page_on == FOOTER else footer
-            )
+            ).set_footer(text=embed_footer)
 
-            fields = self._get_fields(num)
             for field in fields:
                 values = [
                     getattr(field["value"], enum_name) for enum_name in enum_names
