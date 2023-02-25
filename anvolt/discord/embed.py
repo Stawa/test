@@ -46,7 +46,6 @@ class PageEmbed:
         :param timestamp: The timestamp of the embed.
         :return: A list of discord.Embed objects.
         """
-
         num_embeds = ceil(len(self.messages) / self.fields)
         enum_names = (
             [asset.name.lower() for asset in assets_format] if assets_format else []
@@ -59,7 +58,13 @@ class PageEmbed:
             page += title if page_on == TITLE else ""
             page += footer if page_on == FOOTER else ""
 
-            fields = self._get_fields(num)
+            start = num * self.fields
+            end = start + self.fields
+            fields = [
+                {"index": index, "value": value}
+                for index, value in enumerate(self.messages[start:end], start)
+            ]
+
             embed = discord.Embed(
                 title=title if not page_on == TITLE else page,
                 description=description,
@@ -80,12 +85,3 @@ class PageEmbed:
             embeds.append(embed)
 
         return embeds
-
-    def _get_fields(self, num):
-        start = num * self.fields
-        end = start + self.fields
-        fields = [
-            {"index": index, "value": value}
-            for index, value in enumerate(self.messages[start:end], start)
-        ]
-        return fields
