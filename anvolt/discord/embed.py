@@ -27,10 +27,10 @@ class PageEmbed:
         page_on: Union[TITLE, FOOTER] = FOOTER,
         value_fields: str = None,
         assets_format: List[MusicPropertiesEnums] = None,
-        title: Optional[str] = None,
-        description: Optional[str] = None,
-        footer: Optional[str] = None,
-        color: Optional[str] = None,
+        title: Optional[str] = "",
+        description: Optional[str] = "",
+        footer: Optional[str] = "",
+        color: discord.Color = discord.Color.from_rgb(170, 255, 0),
         timestamp: datetime = datetime.utcnow(),
     ) -> List[discord.Embed]:
         """
@@ -54,16 +54,18 @@ class PageEmbed:
         embeds = []
 
         for num in range(num_embeds):
-            title = title if page_on != TITLE else f"Page {num+1}/{num_embeds} {title}"
-            footer = footer if page_on != FOOTER else f"Page {num+1}/{num_embeds} {footer}"
+            page = f"Page {num+1}/{num_embeds}"
+
+            page += title if page_on == TITLE else ""
+            page += footer if page_on == FOOTER else ""
 
             fields = self._get_fields(num)
             embed = discord.Embed(
-                title=title,
+                title=title if not page_on == TITLE else page,
                 description=description,
                 color=color,
                 timestamp=timestamp,
-            ).set_footer(text=footer)
+            ).set_footer(text=footer if not page_on == FOOTER else page)
 
             for field in fields:
                 values = [
